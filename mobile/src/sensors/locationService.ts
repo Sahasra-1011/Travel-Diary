@@ -1,4 +1,5 @@
 import * as Location from "expo-location";
+import { BACKGROUND_LOCATION_TASK } from "../tasks/backgroundLocationTask";
 
 export async function requestForegroundPermission() {
   const { status } = await Location.requestForegroundPermissionsAsync();
@@ -54,5 +55,49 @@ export function stopForegroundTracking() {
   if (locationSubscription) {
     locationSubscription.remove();
     locationSubscription = null;
+  }
+}
+export async function requestBackgroundPermission() {
+  const { status } = await Location.requestBackgroundPermissionsAsync();
+
+  if (status !== "granted") {
+    throw new Error("Background location permission denied");
+  }
+
+  return true;
+}
+
+
+export async function startBackgroundTracking() {
+  const hasStarted = await Location.hasStartedLocationUpdatesAsync(
+    BACKGROUND_LOCATION_TASK
+  );
+
+  if (!hasStarted) {
+    await Location.startLocationUpdatesAsync(
+      BACKGROUND_LOCATION_TASK,
+      {
+        accuracy: Location.Accuracy.High,
+        timeInterval: 10000,
+        distanceInterval: 10,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: "Travel Diary is tracking",
+          notificationBody: "Your trips are being recorded",
+        },
+      }
+    );
+  }
+}
+
+export async function stopBackgroundTracking() {
+  const hasStarted = await Location.hasStartedLocationUpdatesAsync(
+    BACKGROUND_LOCATION_TASK
+  );
+
+  if (hasStarted) {
+    await Location.stopLocationUpdatesAsync(
+      BACKGROUND_LOCATION_TASK
+    );
   }
 }
