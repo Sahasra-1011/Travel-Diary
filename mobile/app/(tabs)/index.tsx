@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
-import { View, Text } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { View, Text, StyleSheet } from "react-native";
+import MapView, { Polyline, Marker } from "react-native-maps";
 
 import {
   requestForegroundPermission,
@@ -11,68 +12,52 @@ import {
 } from "../../src/sensors/locationService";
 
 import { TripDetector, GPSPoint } from "../../src/trip/tripDetector";
-import { initDatabase, saveTrip } from "../../src/storage/database";
+import {
+  initDatabase,
+  saveTrip,
+  getLatestTrip,
+  TripWithPoints,
+} from "../../src/storage/database";
 
 export default function HomeScreen() {
-  // ✅ ONE persistent TripDetector instance
   const tripDetectorRef = useRef<TripDetector | null>(null);
+  const [latestTrip, setLatestTrip] = useState<TripWithPoints | null>(null);
 
-  // Register detector + callbacks ONCE
+  // Create detector once
   if (!tripDetectorRef.current) {
     tripDetectorRef.current = new TripDetector();
 
-    tripDetectorRef.current.onTripStart = (startTime) => {
-      console.log(
-        "🚀 Trip STARTED at",
-        new Date(startTime).toLocaleTimeString()
-      );
-    };
-
     tripDetectorRef.current.onTripEnd = async (trip) => {
-      console.log(
-        "🏁 Trip ENDED",
-        "Start:",
-        new Date(trip.startTime).toLocaleTimeString(),
-        "End:",
-        new Date(trip.endTime).toLocaleTimeString(),
-        "Points:",
-        trip.points.length
-      );
-
-      // ✅ Persist trip to SQLite
       await saveTrip(trip.startTime, trip.endTime, trip.points);
+
+      const savedTrip = await getLatestTrip();
+      setLatestTrip(savedTrip);
     };
   }
 
   useEffect(() => {
-    // Initialize DB once on app start
     initDatabase();
 
     async function init() {
-      try {
-        // ---- Permissions ----
-        await requestForegroundPermission();
-        await requestBackgroundPermission();
+      await requestForegroundPermission();
+      await requestBackgroundPermission();
 
-        // ---- Foreground GPS (feeds TripDetector) ----
-        await startForegroundTracking((location) => {
-          const point: GPSPoint = {
-            latitude: location.latitude,
-            longitude: location.longitude,
-            speed: location.speed,
-            timestamp: location.timestamp,
-          };
+      await startForegroundTracking((location) => {
+        const point: GPSPoint = {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          speed: location.speed,
+          timestamp: location.timestamp,
+        };
 
-          tripDetectorRef.current?.processPoint(point);
-        });
+        tripDetectorRef.current?.processPoint(point);
+      });
 
-        // ---- Background GPS (keeps tracking alive) ----
-        await startBackgroundTracking();
+      await startBackgroundTracking();
 
-        console.log("Tracking initialized");
-      } catch (error) {
-        console.log("Tracking error:", error);
-      }
+      // Load last saved trip on app start
+      const trip = await getLatestTrip();
+      setLatestTrip(trip);
     }
 
     init();
@@ -83,18 +68,43 @@ export default function HomeScreen() {
     };
   }, []);
 
+  if (!latestTrip || latestTrip.points.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Text>No trips yet</Text>
+      </View>
+    );
+  }
+
+  const start = latestTrip.points[0];
+  const end = latestTrip.points[latestTrip.points.length - 1];
+
   return (
-    <View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: "white",
+    <MapView
+      style={StyleSheet.absoluteFill}
+      initialRegion={{
+        latitude: start.latitude,
+        longitude: start.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
       }}
     >
-      <Text style={{ color: "black", fontSize: 18 }}>
-        Travel Diary – Home
-      </Text>
-    </View>
+      <Polyline
+        coordinates={latestTrip.points}
+        strokeWidth={4}
+        strokeColor="blue"
+      />
+
+      <Marker coordinate={start} title="Start" />
+      <Marker coordinate={end} title="End" />
+    </MapView>
   );
 }
+
+const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+});

@@ -65,3 +65,84 @@ export async function saveTrip(
     );
   }
 }
+
+export type TripWithPoints = {
+  id: number;
+  startTime: number;
+  endTime: number;
+  points: {
+    latitude: number;
+    longitude: number;
+  }[];
+};
+
+export async function getLatestTrip(): Promise<TripWithPoints | null> {
+  const trip = await db.getFirstAsync<{
+    id: number;
+    start_time: number;
+    end_time: number;
+  }>("SELECT * FROM trips ORDER BY id DESC LIMIT 1;");
+
+  if (!trip) return null;
+
+  const points = await db.getAllAsync<{
+    latitude: number;
+    longitude: number;
+  }>(
+    "SELECT latitude, longitude FROM trip_points WHERE trip_id = ? ORDER BY timestamp ASC;",
+    [trip.id]
+  );
+
+  return {
+    id: trip.id,
+    startTime: trip.start_time,
+    endTime: trip.end_time,
+    points,
+  };
+}
+
+export type TripSummary = {
+  id: number;
+  startTime: number;
+  endTime: number;
+};
+
+export async function getAllTrips(): Promise<TripSummary[]> {
+  const trips = await db.getAllAsync<{
+    id: number;
+    start_time: number;
+    end_time: number;
+  }>("SELECT * FROM trips ORDER BY id DESC;");
+
+  return trips.map((t) => ({
+    id: t.id,
+    startTime: t.start_time,
+    endTime: t.end_time,
+  }));
+}
+
+export async function getTripById(tripId: number) {
+  const trip = await db.getFirstAsync<{
+    id: number;
+    start_time: number;
+    end_time: number;
+  }>("SELECT * FROM trips WHERE id = ?;", [tripId]);
+
+  if (!trip) return null;
+
+  const points = await db.getAllAsync<{
+    latitude: number;
+    longitude: number;
+  }>(
+    "SELECT latitude, longitude FROM trip_points WHERE trip_id = ? ORDER BY timestamp ASC;",
+    [tripId]
+  );
+
+  return {
+    id: trip.id,
+    startTime: trip.start_time,
+    endTime: trip.end_time,
+    points,
+  };
+}
+
