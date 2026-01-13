@@ -19,8 +19,5 @@ export function detectMode(points: GPSPoint[]) {
   const durationMin =
     (end.timestamp - start.timestamp) / 60000;
 
-  // distance will already be calculated elsewhere
-  // avgSpeed will be passed separately
-
   return { maxSpeed, durationMin };
 }
